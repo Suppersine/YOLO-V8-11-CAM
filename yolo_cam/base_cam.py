@@ -33,7 +33,7 @@ class BaseCAM:
         Methods that return weights channels,
         will typically need to only implement this function. """
 
-    def get_cam_weights(self,
+    def get_cam_weights_old(self,
                         input_tensor: np.array,
                         target_layers: List[torch.nn.Module],
                         targets: List[torch.nn.Module],
@@ -41,7 +41,19 @@ class BaseCAM:
                         grads: torch.Tensor) -> np.ndarray:
         raise Exception("Not Implemented")
 
-    def get_cam_image(self,
+    def get_cam_weights(self, input_tensor: np.array, target_layers: List[torch.nn.Module], targets: List[torch.nn.Module], activations: torch.Tensor, grads: torch.Tensor) -> np.ndarray:
+    """
+    Calculate Grad-CAM weights as the average of gradients over spatial dimensions.
+    """
+    # Compute spatially averaged gradients
+        try:
+            weights = grads.mean(axis=(2, 3))
+            return weights
+        except:
+            raise Exception("Not Implemented")
+
+    
+    def get_cam_image_old(self,
                       input_tensor: np.array,
                       target_layer: torch.nn.Module,
                       targets: List[torch.nn.Module],
@@ -59,6 +71,14 @@ class BaseCAM:
             cam = get_2d_projection(weighted_activations)
         else:
             cam = weighted_activations.sum(axis=1)
+        return cam
+
+    def get_cam_image(self, input_tensor: np.array, target_layer: torch.nn.Module, targets: List[torch.nn.Module], activations: torch.Tensor, grads: torch.Tensor, eigen_smooth: bool = False) -> np.ndarray:
+        
+        weights = self.get_cam_weights(input_tensor, target_layer, targets, activations, grads)
+        # Compute weighted activations
+        weighted_activations = weights[:, :, None, None] * activations
+        cam = weighted_activations.sum(axis=1)
         return cam
 
     def forward(self,
