@@ -42,9 +42,9 @@ class BaseCAM:
         raise Exception("Not Implemented")
 
     def get_cam_weights(self, input_tensor: np.array, target_layers: List[torch.nn.Module], targets: List[torch.nn.Module], activations: torch.Tensor, grads: torch.Tensor) -> np.ndarray:
-    """
-    Calculate Grad-CAM weights as the average of gradients over spatial dimensions.
-    """
+        """
+        Calculate Grad-CAM weights as the average of gradients over spatial dimensions.
+        """
     # Compute spatially averaged gradients
         try:
             weights = grads.mean(axis=(2, 3))
@@ -81,10 +81,8 @@ class BaseCAM:
         cam = weighted_activations.sum(axis=1)
         return cam
 
-    def forward(self,
-                input_tensor: np.array,
-                targets: List[torch.nn.Module],
-                eigen_smooth: bool = False) -> np.ndarray:
+    def forward(self, input_tensor, targets=None, eigen_smooth=False):
+        outputs = self.activations_and_grads(input_tensor)  # Activations and gradients captured here
 
 #         if self.cuda:
 #             input_tensor = torch.tensor(input_tensor).cuda()
@@ -96,21 +94,17 @@ class BaseCAM:
         outputs = self.activations_and_grads(input_tensor)
         if targets is None:
 #             target_categories = np.argmax(outputs[0].cpu().data.numpy(), axis=-1)
-            if self.task == 'od':
-                target_categories = outputs[0].boxes.cls
-            elif self.task == 'cls':
-                # Change
-                # target_categories = [np.argmax(outputs[0].probs.cpu().numpy())]
-                target_categories = outputs[0].probs.top5
+            if self.task == 'od':  # Object detection
+                target_categories = outputs.boxes.cls  # Class labels for detected boxes
+            elif self.task == 'cls':  # Classification
+                target_categories = outputs.probs.argmax(dim=-1)
             else:
-                print('Invalid Task Entered')
-            targets = [ClassifierOutputTarget(
-                category) for category in target_categories]
+                raise ValueError("Invalid task specified. Choose 'od' or 'cls'.")
+            targets = [ClassifierOutputTarget(category) for category in target_categories]
 
         if self.uses_gradients:
             self.model.zero_grad()
-            loss = sum([target(output)
-                       for target, output in zip(targets, outputs)])
+            loss = sum([target(output) for target, output in zip(targets, outputs)])
             loss.backward(retain_graph=True)
 
         # In most of the saliency attribution papers, the saliency is
@@ -122,9 +116,8 @@ class BaseCAM:
         # This gives you more flexibility in case you just want to
         # use all conv layers for example, all Batchnorm layers,
         # or something else.
-        cam_per_layer = self.compute_cam_per_layer(input_tensor,
-                                                   targets,
-                                                   eigen_smooth)
+
+        cam_per_layer = self.compute_cam_per_layer(input_tensor, targets, eigen_smooth)
         return self.aggregate_multi_layers(cam_per_layer)
 
     def get_target_width_height(self,
@@ -231,4 +224,4 @@ class BaseCAM:
             print(
                 f"An exception occurred in CAM with block: {exc_type}. Message: {exc_value}")
             return True
-
+            
